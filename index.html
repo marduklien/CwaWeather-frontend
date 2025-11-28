@@ -6,8 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>開心天氣</title> <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;700;900&display=swap"
-        rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
 
     <style>
         :root {
@@ -123,18 +123,16 @@
     <div class="bg-overlay"></div>
 
     <div id="loading" class="loading-screen">
-        <div style="font-size: 4rem; animation: bounce 2s infinite;">☁️</div>
-        <p style="color: white; font-weight: bold; margin-top: 20px;">正在觀測雲的流動...</p>
+        <span class="material-symbols-outlined loading-spinner">sync</span>
     </div>
+
     <div class="status-bar">
         <div class="location">
             <span class="material-symbols-outlined">location_on</span>
             臺北市
         </div>
-
-        <h3 class="section-title">稍後預報</h3>
-        <div class="scroll-container" id="futureForecasts">
-        </div>
+        <div id="updateTime" class="update-time">...</div>
+    </div>
 
     <div class="container" id="mainContent" style="display: none; opacity: 0; transition: opacity 0.8s ease-in;">
         <div id="heroSection"></div>
@@ -144,16 +142,18 @@
     </div>
 
     <script>
-        const API_URL = "https://happy-weather.zeabur.app/api/weather/kaohsiung";
+        // 修改：API 地點改為 taipei
+        const API_URL = "https://happy-weather.zeabur.app/api/weather/taipei";
 
-        function getWeatherIcon(weather) {
-            if (!weather) return "🌤️";
-            if (weather.includes("晴")) return "☀️";
-            if (weather.includes("多雲")) return "⛅";
-            if (weather.includes("陰")) return "☁️";
-            if (weather.includes("雨")) return "🌧️";
-            if (weather.includes("雷")) return "⛈️";
-            return "🌤️";
+        function getWeatherIconName(weather) {
+            if (!weather) return "sunny";
+            if (weather.includes("雷")) return "thunderstorm";
+            if (weather.includes("雨")) return "rainy";
+            if (weather.includes("霧")) return "foggy";
+            if (weather.includes("陰")) return "cloud";
+            if (weather.includes("多雲")) return "partly_cloudy_day";
+            if (weather.includes("晴")) return "wb_sunny";
+            return "wb_sunny";
         }
 
         function getIconHtml(iconName, className = "") {
@@ -236,34 +236,23 @@
             const current = forecasts[0];
             const others = forecasts.slice(1);
 
-            // 1. 渲染 Hero Card (主畫面)
-            const advice = getAdvice(current.rain, current.maxTemp);
-            const period = getTimePeriod(current.startTime);
-            const avgTemp = Math.round((parseInt(current.maxTemp) + parseInt(current.minTemp)) / 2);
+            updateBackgroundAnimation(current.weather);
 
-            document.getElementById('heroCard').innerHTML = `
-                        <div class="hero-card">
-                            <div class="hero-period">${period}</div>
-                            <div class="hero-temp-container">
-                                <div class="hero-icon">${getWeatherIcon(current.weather)}</div>
-                                <div class="hero-temp">${avgTemp}°</div>
-                            </div>
-                            <div class="hero-desc">${current.weather}</div>
-                            
-                            <div class="advice-grid">
-                                <div class="advice-item">
-                                    <div class="advice-icon">${advice.rainIcon}</div>
-                                    <div class="advice-text">${advice.rainText}</div>
-                                    <div style="font-size:0.7rem; color:#999">降雨率 ${current.rain}</div>
-                                </div>
-                                <div class="advice-item">
-                                    <div class="advice-icon">${advice.clothIcon}</div>
-                                    <div class="advice-text">${advice.clothText}</div>
-                                    <div style="font-size:0.7rem; color:#999">最高溫 ${current.maxTemp}°</div>
-                                </div>
-                            </div>
-                        </div>
-                    `;
+            const avgTemp = Math.round((parseInt(current.maxTemp) + parseInt(current.minTemp)) / 2);
+            const iconName = getWeatherIconName(current.weather);
+
+            document.getElementById('heroSection').innerHTML = `
+                <div class="hero-section">
+                    <div class="hero-temp-group">
+                        ${getIconHtml(iconName, "hero-icon-large")}
+                        <div class="hero-temp">${avgTemp}°</div>
+                    </div>
+                    <div class="hero-condition">${current.weather}</div>
+                    <div class="hero-details">
+                        <span>最高 ${current.maxTemp}°</span> <span>|</span> <span>最低 ${current.minTemp}°</span>
+                    </div>
+                </div>
+            `;
 
             const advice = getAdviceData(current.rain, current.maxTemp);
             document.getElementById('adviceSection').innerHTML = `
@@ -296,40 +285,30 @@
                 `;
             });
 
-            // 3. 右上角顯示今日日期
             const now = new Date();
             document.getElementById('updateTime').textContent = `更新 ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
         }
 
         async function fetchWeather() {
             try {
-                // 1. 定義「最低等待時間」：1500 毫秒 (1.5秒)
-                const delayPromise = new Promise(resolve => setTimeout(resolve, 1500));
-
-                // 2. 定義「抓取資料」的工作
-                const fetchPromise = fetch(API_URL).then(res => res.json());
-
-                // 3. Promise.all 會等待「兩個都完成」才會往下走
-                // result 陣列裡，第一個是 delay 的結果(沒用到)，第二個是 api 的 json 資料
-                const [_, json] = await Promise.all([delayPromise, fetchPromise]);
-
+                const [_, json] = await Promise.all([new Promise(r => setTimeout(r, 500)), fetch(API_URL).then(res => res.json())]);
                 if (json.success) {
                     renderWeather(json.data);
-
-                    // 資料處理好後，隱藏 Loading，顯示主畫面
-                    document.getElementById('loading').style.display = 'none';
-                    document.getElementById('mainContent').style.display = 'block';
-                } else {
-                    throw new Error("API Error");
-                }
+                    const loading = document.getElementById('loading');
+                    loading.style.opacity = '0';
+                    setTimeout(() => {
+                        loading.style.display = 'none';
+                        const main = document.getElementById('mainContent');
+                        main.style.display = 'block';
+                        requestAnimationFrame(() => { main.style.opacity = '1'; });
+                    }, 500);
+                } else { throw new Error("API Error"); }
             } catch (e) {
                 console.error(e);
-                alert("天氣資料讀取失敗，狸克把網路線咬斷了！");
+                document.getElementById('loading').innerHTML = '<p>暫時無法取得資料</p>';
             }
         }
-
         document.addEventListener("DOMContentLoaded", fetchWeather);
     </script>
 </body>
-
 </html>
